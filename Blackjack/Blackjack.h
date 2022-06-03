@@ -1,9 +1,11 @@
-﻿// Blackjack.h : Include file for standard system include files,
+// Blackjack.h : Include file for standard system include files,
 // or project specific include files.
 
 #include <iostream>
 #include <queue>
-#include <array>
+#include <algorithm>
+#include <random>
+#include <chrono>
 /// <summary>
 ///		Converts the card number into an int for scoring.
 /// </summary>
@@ -23,7 +25,11 @@ int cardToInt(std::string num) {
 	else if (num == "Jack") return 10;
 	else if (num == "Queen") return 10;
 	else if (num == "King") return 10;
+	else {
+		return 0;
+	}
 }
+
 class Card {
 	std::string suit;
 	std::string cardNumber;
@@ -55,54 +61,15 @@ class Card {
 		}
 };
 
-class Dealer : public Player {
-	std::queue<Card> deck;
-	std::queue<Card> hands;
-	public:
-		Card giveCardToDealer() {
-			Card c = this->removeCard();
-			this->addCard(c);
-			return c;
-		}
-
-		Card removeCard() {
-			Card c = deck.front();
-			deck.pop();
-			return c;
-		}
-
-		Dealer(int seed) {
-			std::array<Card, 312> cards;
-			std::string cardNums[] = { "Two", "Three", "Four", "Five", "Six", "Seven", "Eight",
-			"Nine", "Ten", "Jack", "Queen", "King", "Ace"};
-			std::string suits[] = { "Hearts", "Spades", "Diamonds", "Clubs" };
-			int i = 0;
-			for (int index = 0; i < 6; i++) {
-				for (std::string suit : suits) {
-					for (std::string num : cardNums) {
-						Card c(suit, num);
-						cards[i++] = c;
-					}
-				}
-			}
-			std::shuffle(cards.begin(), cards.end(), seed);
-			std::queue<Card> deck;
-			for (int j = 0; j < cards.size(); j++) {
-				Card c = cards[i];
-				deck.push(c);
-			}
-			this->deck = deck;
-		}
-};
-
 class Player {
 	int sum;
 	int aceSum;
 	float money;
-	bool isIn;
-	std::queue<Card> hand;
 
 	public:
+        bool isIn;
+		std::queue<Card> hand;
+
 		Player(float money) {
 			this->sum = 0;
 			this->money = money;
@@ -113,7 +80,7 @@ class Player {
 		
 		Player() {
 			this->sum = 0;
-			this->money = 0;
+			this->money = 500;
 			this->hand = std::queue<Card>();
 			this->aceSum = 0;
 		}
@@ -130,14 +97,18 @@ class Player {
 			return this->money;
 		}
 
-		bool getStatus() {
-			return this->isIn;
-		}
-
 		Card getCard() {
 			Card c = hand.front();
 			hand.pop();
 			return c;
+		}
+
+		void reset() {
+			while (!this->hand.empty()) {
+				this->hand.pop();
+			}
+			this->sum = 0;
+			this->aceSum = 0;
 		}
 
 		void addCard(Card c) {
@@ -153,4 +124,118 @@ class Player {
 			
 		}
 
+        void readHand(int playerIndex) {
+            Card c = this->getCard();
+            std::cout << "The first card of Player " << playerIndex << " is the ";
+            c.readCard();
+			this->hand.push(c);
+            c = this->getCard();
+            std::cout << "The second card of Player " << playerIndex << " is the ";
+            c.readCard();
+			this->hand.push(c);
+        }
+
 };
+
+class Dealer : public Player {
+	std::queue<Card> deck;
+	public:
+		Card giveCardToDealer() {
+			Card c = this->removeCard();
+			this->addCard(c);
+			return c;
+		}
+
+		Card removeCard() {
+			Card c = this->deck.front();
+			this->deck.pop();
+			return c;
+		}
+
+		Dealer() {
+			std::default_random_engine engine;
+			//Grabs a seed based off of ms from Jan 1 1970.
+			engine.seed(std::chrono::system_clock::now().time_since_epoch().count());
+			std::vector<Card> cards;
+			const std::string cardNums[] = {"Two", "Three", "Four", "Five", "Six", "Seven", "Eight",
+			"Nine", "Ten", "Jack", "Queen", "King", "Ace"};
+			const std::string suits[] = { "Hearts", "Spades", "Diamonds", "Clubs" };
+			for (int i = 0; i < 6; i++) {
+				for (std::string suit : suits) {
+					for (std::string num : cardNums) {
+						Card c(suit, num);
+						cards.push_back(c);
+					}
+				}
+			}
+			std::shuffle(cards.begin(), cards.end(), engine);
+			std::queue<Card> deck;
+			for (int i = 0; i < cards.size(); i++) {
+				Card c = cards[i];
+				deck.push(c);
+			}
+			this->deck = deck;
+		}
+
+		bool performDealerTurn() {
+			bool dealerCondition;
+			int i = 1;
+			while (!this->hand.empty()) {
+				Card c = this->hand.front();
+				this->hand.pop();
+				std::cout << "Card Number " << i++ << " of the dealer is the ";
+				c.readCard(); 
+			}
+			if ((this->getAceSum() > 21 && this->getSum() > 21) || (this->getAceSum() == 0 && this->getSum() > 21)) {
+				std::cout << "The dealer's sum is " << this->getSum() << " / " << this->getAceSum() << std::endl;
+				std::cout << "The dealer lost!\n";
+				dealerCondition = false;
+			}
+			else if (this->getAceSum() < 21 && this->getSum() > 21) {
+				std::cout << "The dealer's sum is " << this->getAceSum() << std::endl;
+				dealerCondition = true;
+			}
+			else {
+				std::cout << "The dealer's sum is " << this->getSum() << " / " << this->getAceSum() << std::endl;
+				dealerCondition = true;
+			}
+
+			return dealerCondition;
+		}
+};
+
+Card givePlayerCardFromDealer(Player &p, Dealer &d) {
+	Card c = d.removeCard();
+	p.addCard(c);
+	return c;
+}
+
+Card dealCards(Dealer &d, Player* &players, int numOfPlayers, int softCap) {
+	Card c;
+	for (int i = 0; i < 2; i++) {
+        for (int j = 0; j < numOfPlayers; j++) {
+            givePlayerCardFromDealer(players[j], d);
+        }
+		if (i == 0) {
+			c = d.giveCardToDealer();
+		}
+		else {
+			d.giveCardToDealer();
+		}
+    }
+    while (d.getSum() <= softCap && d.getAceSum() <= softCap) {
+        d.giveCardToDealer();
+	}
+	return c;
+}
+
+void displaySum(Player p) {
+	std::cout << "Sum: ";
+	if (p.getAceSum() > 0) {
+		std::cout << p.getAceSum() << "/" << p.getSum() << std::endl;
+	}
+	else {
+		std::cout << p.getSum() << std::endl;
+	}
+}
+
